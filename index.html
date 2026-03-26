@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Property Photo Mapper</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #eef1f5;
+      color: #1e2d3d;
+      min-height: 100vh;
+    }
+
+    /* ─── Header ───────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      color: #fff;
+      padding: 14px 20px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      box-shadow: 0 2px 12px rgba(0,0,0,.35);
+    }
+    header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: .4px; }
+    header p  { font-size: .78rem; opacity: .7; margin-top: 2px; }
+
+    /* ─── Container ────────────────────────────── */
+    .container { max-width: 960px; margin: 0 auto; padding: 16px; }
+
+    /* ─── Upload Panel ──────────────────────────── */
+    .upload-panel {
+      background: #fff;
+      border: 2px dashed #b0bec5;
+      border-radius: 18px;
+      padding: 36px 20px;
+      text-align: center;
+      transition: border-color .2s, background .2s;
+      margin-bottom: 16px;
+    }
+    .upload-panel.dragover { border-color: #2196f3; background: #e3f2fd; }
+    .upload-panel .up-icon { font-size: 2.8rem; }
+    .upload-panel h2 { font-size: 1.1rem; margin: 8px 0 4px; }
+    .upload-panel p  { font-size: .83rem; color: #607d8b; }
+    .upload-tip {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 16px; padding: 8px 14px;
+      background: #e8f5e9; border-radius: 20px;
+      font-size: .76rem; color: #2e7d32; font-weight: 500;
+    }
+    .btn-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 11px 22px; border-radius: 30px; border: none;
+      font-size: .9rem; font-weight: 600; cursor: pointer;
+      transition: filter .15s;
+    }
+    .btn:hover { filter: brightness(1.08); }
+    .btn-primary { background: #2196f3; color: #fff; }
+    .btn-secondary { background: #fff; color: #2196f3; border: 2px solid #2196f3; }
+    .btn-outline {
+      display: block; width: 100%; padding: 13px;
+      border-radius: 14px; border: 2px solid #2196f3;
+      color: #2196f3; background: #fff; font-size: .95rem;
+      font-weight: 600; cursor: pointer; text-align: center;
+      margin-bottom: 14px; transition: all .2s;
+    }
+    .btn-outline:hover { background: #2196f3; color: #fff; }
+    input[type="file"] { display: none; }
+
+    /* ─── Spinner ───────────────────────────────── */
+    .spinner-wrap {
+      display: none; text-align: center; padding: 28px;
+      background: #fff; border-radius: 18px; margin-bottom: 16px;
+    }
+    .spinner-wrap.show { display: block; }
+    .spinner {
+      width: 38px; height: 38px; border: 3px solid #e0e0e0;
+      border-top-color: #2196f3; border-radius: 50%;
+      animation: spin .75s linear infinite; margin: 0 auto 10px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Results ───────────────────────────────── */
+    .results { display: none; }
+    .results.show { display: block; }
+
+    /* ─── Photo Preview ─────────────────────────── */
+    .photo-card {
+      background: #111;
+      border-radius: 18px; overflow: hidden;
+      margin-bottom: 14px;
+      box-shadow: 0 3px 12px rgba(0,0,0,.15);
+    }
+    .photo-card img {
+      width: 100%; max-height: 420px;
+      object-fit: contain; display: block;
+    }
+    .photo-placeholder {
+      display: none; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 180px; padding: 32px;
+      background: #1a1a1a; color: #888; text-align: center; gap: 10px;
+    }
+    .photo-placeholder .ph-icon { font-size: 3rem; }
+    .photo-placeholder p { font-size: .85rem; }
+    .photo-meta-bar {
+      background: #fff; padding: 10px 16px;
+      font-size: .8rem; color: #607d8b;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 6px;
+    }
+    #copyBtn {
+      background: none; border: 1px solid #b0bec5;
+      border-radius: 8px; padding: 4px 10px;
+      font-size: .75rem; color: #546e7a; cursor: pointer;
+      transition: all .2s;
+    }
+    #copyBtn:hover { background: #eceff1; }
+
+    /* ─── GPS Banner ────────────────────────────── */
+    .gps-banner {
+      border-radius: 14px; padding: 16px;
+      margin-bottom: 14px; display: none;
+    }
+    .gps-banner.has-gps {
+      display: flex; align-items: flex-start; gap: 12px;
+      background: linear-gradient(135deg, #1b5e20, #2e7d32);
+      color: #fff; box-shadow: 0 3px 10px rgba(30,93,32,.3);
+    }
+    .gps-banner.no-gps {
+      display: flex; align-items: center; gap: 10px;
+      background: #fff8e1; border: 1px solid #ffca28; color: #5d4037;
+    }
+    .gps-icon { font-size: 2rem; flex-shrink: 0; }
+    .gps-label {
+      font-size: .72rem; text-transform: uppercase;
+      letter-spacing: .6px; opacity: .8; margin-bottom: 3px;
+    }
+    .gps-coords {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 1.05rem; font-weight: 700; letter-spacing: .2px;
+    }
+    .gps-extras { font-size: .8rem; opacity: .85; margin-top: 4px; }
+
+    /* ─── Direction accuracy warning ───────────── */
+    .dir-warning {
+      display: none; align-items: flex-start; gap: 8px;
+      background: #fff3e0; border: 1px solid #ffb74d;
+      border-radius: 10px; padding: 10px 14px;
+      font-size: .78rem; color: #bf360c; line-height: 1.5;
+      margin: 4px 16px 10px;
+    }
+    .dir-warning.show { display: flex; }
+    .dir-warning strong { display: block; margin-bottom: 2px; }
+
+    /* ─── Metadata Grid ─────────────────────────── */
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px; margin-bottom: 14px;
+    }
+    @media (min-width: 580px) { .meta-grid { grid-template-columns: 1fr 1fr; } }
+
+    .meta-card {
+      background: #fff; border-radius: 16px; overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    }
+    .card-hd {
+      padding: 11px 16px; font-size: .7rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: .8px;
+      display: flex; align-items: center; gap: 7px;
+    }
+    .hd-cam  { background: #e3f2fd; color: #0d47a1; }
+    .hd-set  { background: #fff8e1; color: #e65100; }
+    .hd-dt   { background: #e8f5e9; color: #1b5e20; }
+    .hd-file { background: #f3e5f5; color: #4a148c; }
+    .hd-gps  { background: #e0f2f1; color: #004d40; }
+
+    .meta-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 9px 16px; border-bottom: 1px solid #f5f5f5; gap: 8px;
+    }
+    .meta-row:last-child { border-bottom: none; }
+    .meta-lbl { font-size: .78rem; color: #90a4ae; min-width: 110px; flex-shrink: 0; }
+    .meta-val { font-size: .83rem; color: #1e2d3d; font-weight: 500; text-align: right; word-break: break-word; }
+
+    /* ─── Map ───────────────────────────────────── */
+    .map-card {
+      background: #fff; border-radius: 16px; overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      margin-bottom: 14px; display: none;
+    }
+    .map-card.show { display: block; }
+    .map-hd {
+      padding: 11px 16px; background: #e1f5fe; color: #01579b;
+      font-size: .7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .8px;
+      display: flex; align-items: center; gap: 7px;
+    }
+    #map { height: 320px; width: 100%; }
+    .map-foot {
+      padding: 8px 16px; font-size: .72rem; color: #90a4ae;
+      border-top: 1px solid #f0f0f0; text-align: center;
+    }
+
+    /* ─── Raw EXIF ──────────────────────────────── */
+    .raw-toggle {
+      width: 100%; padding: 10px; background: #fff;
+      border: 1px solid #cfd8dc; border-radius: 12px;
+      font-size: .8rem; color: #78909c; cursor: pointer;
+      margin-bottom: 14px; transition: background .15s;
+    }
+    .raw-toggle:hover { background: #eceff1; }
+    .raw-box {
+      display: none; background: #fff; border-radius: 14px;
+      padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: .72rem; overflow: auto; max-height: 340px;
+      white-space: pre-wrap; word-break: break-word;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06); margin-bottom: 14px;
+    }
+    .raw-box.show { display: block; }
+
+    /* ─── Toast ─────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+      background: #323232; color: #fff; padding: 10px 22px;
+      border-radius: 24px; font-size: .85rem;
+      box-shadow: 0 4px 14px rgba(0,0,0,.3);
+      transition: transform .3s ease; z-index: 999; pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📍 Property Photo Mapper</h1>
+  <p>Upload a photo to extract metadata & GPS location</p>
+</header>
+
+<div class="container">
+
+  <!-- Upload Panel -->
+  <div class="upload-panel" id="uploadPanel">
+    <div class="up-icon">🏡</div>
+    <h2>Upload a Property Photo</h2>
+    <p>Select from your library or shoot a new photo with your camera</p>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="triggerInput('library')">📂 Choose from Library</button>
+      <button class="btn btn-secondary" onclick="triggerInput('camera')">📷 Take Photo</button>
+    </div>
+    <div class="upload-tip">📱 Hold phone vertically (portrait) for most accurate direction data</div>
+    <input type="file" id="fileLibrary" accept="image/*,image/heic,image/heif" />
+    <input type="file" id="fileCamera"  accept="image/*" capture="environment" />
+  </div>
+
+  <!-- Spinner -->
+  <div class="spinner-wrap" id="spinner">
+    <div class="spinner"></div>
+    <p style="font-size:.88rem;color:#607d8b;">Reading photo metadata…</p>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results">
+
+    <!-- Another photo button -->
+    <button class="btn-outline" onclick="triggerInput('library')">📷 Upload Another Photo</button>
+
+    <!-- Photo Preview -->
+    <div class="photo-card">
+      <img id="photoPreview" src="" alt="Uploaded photo" />
+      <div class="photo-placeholder" id="photoPlaceholder">
+        <div class="ph-icon">🖼️</div>
+        <p>Preview not available for HEIC files on this browser.<br>Metadata has still been read below.</p>
+      </div>
+      <div class="photo-meta-bar">
+        <span id="photoName"></span>
+        <button id="copyBtn" onclick="copyCoords()" style="display:none">📋 Copy Coords</button>
+      </div>
+    </div>
+
+    <!-- GPS Banner -->
+    <div class="gps-banner" id="gpsBanner">
+      <div class="gps-icon" id="gpsIcon"></div>
+      <div>
+        <div class="gps-label" id="gpsLabel"></div>
+        <div class="gps-coords" id="gpsCoords"></div>
+        <div class="gps-extras" id="gpsExtras"></div>
+      </div>
+    </div>
+
+    <!-- Metadata Grid -->
+    <div class="meta-grid">
+      <div class="meta-card">
+        <div class="card-hd hd-cam">📷 Camera</div>
+        <div id="camData"></div>
+      </div>
+      <div class="meta-card">
+        <div class="card-hd hd-set">⚙️ Capture Settings</div>
+        <div id="setData"></div>
+      </div>
+      <div class="meta-card">
+        <div class="card-hd hd-dt">🕐 Date &amp; Time</div>
+        <div id="dtData"></div>
+      </div>
+      <div class="meta-card">
+        <div class="card-hd hd-file">📁 Image Info</div>
+        <div id="fileInfoData"></div>
+      </div>
+    </div>
+
+    <!-- GPS Detail Card (shown only when GPS available) -->
+    <div class="meta-card" id="gpsCard" style="margin-bottom:14px;display:none">
+      <div class="card-hd hd-gps">🌐 GPS Detail</div>
+      <div id="gpsDetailData"></div>
+      <div class="dir-warning" id="dirWarning">
+        <span>⚠️</span>
+        <div>
+          <strong>Direction may be ~90° off</strong>
+          This photo was taken in landscape (horizontal) mode. iOS records the bearing of the phone's top edge, not the lens — so the direction arrow could be rotated by roughly 90°. For accurate direction data, shoot in portrait (vertical) mode.
+        </div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="map-card" id="mapCard">
+      <div class="map-hd">🗺️ Location on Map</div>
+      <div id="map"></div>
+      <div class="map-foot">
+        © OpenStreetMap contributors · Blue arc = camera direction
+      </div>
+    </div>
+
+    <!-- Raw EXIF -->
+    <button class="raw-toggle" id="rawToggle" onclick="toggleRaw()">
+      Show All Raw EXIF Data ▼
+    </button>
+    <pre class="raw-box" id="rawBox"></pre>
+
+  </div><!-- /results -->
+
+</div><!-- /container -->
+
+<div class="toast" id="toast"></div>
+
+<!-- Libraries -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/exifr/dist/full.umd.cjs"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   Property Photo Mapper — main script
+═══════════════════════════════════════════════════════════════ */
+
+let leafletMap   = null;
+let rawVisible   = false;
+let currentCoords = null;  // { lat, lon } for clipboard copy
+
+// ── Input wiring ──────────────────────────────────────────────
+function triggerInput(mode) {
+  document.getElementById(mode === 'camera' ? 'fileCamera' : 'fileLibrary').click();
+}
+['fileLibrary','fileCamera'].forEach(id => {
+  document.getElementById(id).addEventListener('change', e => {
+    if (e.target.files[0]) processFile(e.target.files[0]);
+  });
+});
+
+// Drag-and-drop on upload panel
+const panel = document.getElementById('uploadPanel');
+panel.addEventListener('dragover',  e => { e.preventDefault(); panel.classList.add('dragover'); });
+panel.addEventListener('dragleave', () => panel.classList.remove('dragover'));
+panel.addEventListener('drop', e => {
+  e.preventDefault(); panel.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) processFile(f);
+});
+
+// ── Core processor ────────────────────────────────────────────
+async function processFile(file) {
+  show('spinner'); hide('results');
+  currentCoords = null;
+
+  // Reset preview state
+  const imgEl = document.getElementById('photoPreview');
+  const phEl  = document.getElementById('photoPlaceholder');
+  imgEl.style.display = 'block';
+  phEl.style.display  = 'none';
+
+  // Try to show preview; HEIC won't render in Chrome/Windows — show placeholder instead
+  const url = URL.createObjectURL(file);
+  imgEl.onerror = () => {
+    imgEl.style.display = 'none';
+    phEl.style.display  = 'flex';
+  };
+  imgEl.src = url;
+
+  document.getElementById('photoName').textContent =
+    `📄 ${file.name}  ·  ${fmtBytes(file.size)}`;
+
+  let exif = null;
+  try {
+    // Use `true` to parse ALL segments — required for HEIC/HEIF and broadest compatibility
+    exif = await exifr.parse(file, true);
+  } catch (err) {
+    console.warn('Full parse failed, trying GPS-only fallback:', err);
+    try {
+      const gps = await exifr.gps(file);
+      if (gps) exif = gps;
+    } catch (err2) {
+      console.warn('GPS fallback also failed:', err2);
+    }
+  }
+
+  hide('spinner'); show('results');
+  console.log('EXIF result:', exif);
+
+  if (!exif || Object.keys(exif).length === 0) {
+    showNoGPS('No metadata found. If this is a HEIC file, try converting to JPEG first.');
+    fillCards({}, file);
+    document.getElementById('rawBox').textContent = '(no EXIF data found)';
+    return;
+  }
+
+  // GPS
+  const lat = exif.latitude;
+  const lon = exif.longitude;
+  if (lat != null && lon != null) {
+    currentCoords = { lat, lon };
+    showGPS(lat, lon, exif);
+    renderMap(lat, lon, exif);
+  } else {
+    showNoGPS();
+    hideEl('mapCard'); hideEl('gpsCard');
+  }
+
+  fillCards(exif, file);
+
+  // Raw data
+  document.getElementById('rawBox').textContent = JSON.stringify(exif, null, 2);
+}
+
+// ── GPS Banner ────────────────────────────────────────────────
+function showGPS(lat, lon, exif) {
+  const b = document.getElementById('gpsBanner');
+  b.className = 'gps-banner has-gps';
+  document.getElementById('gpsIcon').textContent  = '📍';
+  document.getElementById('gpsLabel').textContent = 'GPS Location Found';
+  document.getElementById('gpsCoords').textContent =
+    `${fmtDeg(lat, 'lat')}  /  ${fmtDeg(lon, 'lon')}`;
+
+  const extras = [];
+  if (exif.GPSAltitude != null)    extras.push(`Altitude: ${exif.GPSAltitude.toFixed(1)} m`);
+  if (exif.GPSImgDirection != null)
+    extras.push(`Direction: ${exif.GPSImgDirection.toFixed(1)}° ${compass(exif.GPSImgDirection)}`);
+  if (exif.GPSSpeed != null)       extras.push(`Speed: ${exif.GPSSpeed.toFixed(1)} km/h`);
+  document.getElementById('gpsExtras').textContent = extras.join('   ·   ');
+
+  document.getElementById('copyBtn').style.display = '';
+
+  // GPS Detail card
+  const rows = [
+    ['Latitude',       fmtDeg(lat, 'lat') + ` (${lat.toFixed(7)})`],
+    ['Longitude',      fmtDeg(lon, 'lon') + ` (${lon.toFixed(7)})`],
+    ['Altitude',       exif.GPSAltitude != null ? `${exif.GPSAltitude.toFixed(2)} m` : null],
+    ['Direction',      exif.GPSImgDirection != null
+                         ? `${exif.GPSImgDirection.toFixed(2)}° ${compass(exif.GPSImgDirection)}` : null],
+    ['Direction Ref',  exif.GPSImgDirectionRef || null],
+    ['Speed',          exif.GPSSpeed != null ? `${exif.GPSSpeed} km/h` : null],
+    ['GPS Datum',      exif.GPSMapDatum || null],
+    ['GPS Timestamp',  exif.GPSDateStamp || null],
+  ];
+  renderRows('gpsDetailData', rows);
+  document.getElementById('gpsCard').style.display = '';
+
+  // Warn if landscape orientation — iOS direction data can be ~90° off
+  // Orientation 6 = 90° CW (phone rotated right), 8 = 90° CCW (phone rotated left)
+  const isLandscape = exif.Orientation === 6 || exif.Orientation === 8;
+  const dirWarning  = document.getElementById('dirWarning');
+  if (exif.GPSImgDirection != null && isLandscape) {
+    dirWarning.classList.add('show');
+  } else {
+    dirWarning.classList.remove('show');
+  }
+}
+
+function showNoGPS(msg) {
+  const b = document.getElementById('gpsBanner');
+  b.className = 'gps-banner no-gps';
+  document.getElementById('gpsIcon').textContent   = '⚠️';
+  document.getElementById('gpsLabel').textContent  = msg || 'No GPS data found. Enable Location Services for your Camera app.';
+  document.getElementById('gpsCoords').textContent = '';
+  document.getElementById('gpsExtras').textContent = '';
+  document.getElementById('copyBtn').style.display = 'none';
+  hideEl('gpsCard');
+  hideEl('mapCard');
+}
+
+// ── Map ───────────────────────────────────────────────────────
+function renderMap(lat, lon, exif) {
+  showEl('mapCard');
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+
+  leafletMap = L.map('map').setView([lat, lon], 18);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19,
+  }).addTo(leafletMap);
+
+  const dir = exif.GPSImgDirection;
+  const icon = dir != null ? directionIcon(dir) : pinIcon();
+  L.marker([lat, lon], { icon })
+    .addTo(leafletMap)
+    .bindPopup(popupHTML(lat, lon, dir))
+    .openPopup();
+}
+
+function directionIcon(deg) {
+  const sz = 90, cx = 45, cy = 45, r = 40, fov = 70;
+  const a1 = (deg - fov / 2 - 90) * Math.PI / 180;
+  const a2 = (deg + fov / 2 - 90) * Math.PI / 180;
+  const x1 = (cx + r * Math.cos(a1)).toFixed(2);
+  const y1 = (cy + r * Math.sin(a1)).toFixed(2);
+  const x2 = (cx + r * Math.cos(a2)).toFixed(2);
+  const y2 = (cy + r * Math.sin(a2)).toFixed(2);
+
+  const svg = `
+    <svg width="${sz}" height="${sz}" viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg">
+      <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z"
+            fill="rgba(33,150,243,.32)" stroke="#1565c0" stroke-width="1.6"/>
+      <circle cx="${cx}" cy="${cy}" r="9" fill="#e53935" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="${cx}" cy="${cy}" r="3.5" fill="#fff"/>
+    </svg>`;
+
+  return L.divIcon({
+    html: svg, className: '',
+    iconSize: [sz, sz], iconAnchor: [cx, cy], popupAnchor: [0, -cx],
+  });
+}
+
+function pinIcon() {
+  const svg = `
+    <svg width="36" height="48" viewBox="0 0 36 48" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18,1 C8.6,1 1,8.6 1,18 C1,30 18,47 18,47 C18,47 35,30 35,18 C35,8.6 27.4,1 18,1Z"
+            fill="#e53935" stroke="#fff" stroke-width="2"/>
+      <circle cx="18" cy="18" r="7" fill="#fff"/>
+    </svg>`;
+  return L.divIcon({
+    html: svg, className: '',
+    iconSize: [36, 48], iconAnchor: [18, 47], popupAnchor: [0, -47],
+  });
+}
+
+function popupHTML(lat, lon, dir) {
+  let h = `<b>📍 Photo Location</b><br>
+    <small>${fmtDeg(lat,'lat')}<br>${fmtDeg(lon,'lon')}</small>`;
+  if (dir != null)
+    h += `<br><small>📷 ${dir.toFixed(1)}° ${compass(dir)}</small>`;
+  return h;
+}
+
+// ── Metadata cards ────────────────────────────────────────────
+function fillCards(e, file) {
+  renderRows('camData', [
+    ['Make',        e.Make],
+    ['Model',       e.Model],
+    ['Lens Model',  e.LensModel],
+    ['Software',    e.Software],
+  ]);
+  renderRows('setData', [
+    ['Aperture',      e.FNumber    ? `ƒ/${e.FNumber}` : null],
+    ['Shutter Speed', fmtShutter(e.ExposureTime)],
+    ['ISO',           e.ISO        ? `ISO ${e.ISO}` : null],
+    ['Focal Length',  e.FocalLength ? `${e.FocalLength} mm` : null],
+    ['Exp. Bias',     e.ExposureCompensation != null ? `${e.ExposureCompensation} EV` : null],
+    ['Flash',         fmtFlash(e.Flash)],
+    ['White Balance', e.WhiteBalance != null ? (e.WhiteBalance === 0 ? 'Auto' : 'Manual') : null],
+    ['Metering',      fmtMetering(e.MeteringMode)],
+  ]);
+  const dt = e.DateTimeOriginal || e.CreateDate || e.DateTime;
+  renderRows('dtData', [
+    ['Date',      dt ? fmtDate(dt) : null],
+    ['Time',      dt ? fmtTime(dt) : null],
+    ['Timezone',  e.OffsetTimeOriginal || e.OffsetTime || null],
+    ['Digitized', e.DateTimeDigitized ? fmtDate(e.DateTimeDigitized) : null],
+  ]);
+  const w = e.ImageWidth  || e.ExifImageWidth;
+  const h = e.ImageHeight || e.ExifImageHeight;
+  renderRows('fileInfoData', [
+    ['Filename',    file.name],
+    ['File Size',   fmtBytes(file.size)],
+    ['Dimensions',  w && h ? `${w} × ${h} px` : null],
+    ['Orientation', fmtOrientation(e.Orientation)],
+    ['Color Space', e.ColorSpace === 1 ? 'sRGB' : (e.ColorSpace ? String(e.ColorSpace) : null)],
+    ['Bit Depth',   e.BitsPerSample ? `${e.BitsPerSample}-bit` : null],
+  ]);
+}
+
+function renderRows(id, rows) {
+  const el = document.getElementById(id);
+  const valid = rows.filter(([, v]) => v != null && v !== '');
+  el.innerHTML = valid.length
+    ? valid.map(([l, v]) =>
+        `<div class="meta-row">
+           <span class="meta-lbl">${l}</span>
+           <span class="meta-val">${v}</span>
+         </div>`).join('')
+    : `<div class="meta-row"><span class="meta-lbl" style="color:#b0bec5">No data</span></div>`;
+}
+
+// ── Raw EXIF toggle ───────────────────────────────────────────
+function toggleRaw() {
+  rawVisible = !rawVisible;
+  document.getElementById('rawBox').classList.toggle('show', rawVisible);
+  document.getElementById('rawToggle').textContent = rawVisible
+    ? 'Hide Raw EXIF Data ▲'
+    : 'Show All Raw EXIF Data ▼';
+}
+
+// ── Copy coordinates ──────────────────────────────────────────
+function copyCoords() {
+  if (!currentCoords) return;
+  const txt = `${currentCoords.lat.toFixed(7)}, ${currentCoords.lon.toFixed(7)}`;
+  navigator.clipboard.writeText(txt).then(() => toast('✅ Coordinates copied!'));
+}
+
+// ── Utility ───────────────────────────────────────────────────
+function fmtBytes(b) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1048576) return `${(b/1024).toFixed(1)} KB`;
+  return `${(b/1048576).toFixed(2)} MB`;
+}
+function fmtShutter(exp) {
+  if (exp == null) return null;
+  return exp >= 1 ? `${exp}s` : `1/${Math.round(1/exp)}s`;
+}
+function fmtFlash(v) {
+  if (v == null) return null;
+  return (v & 1) ? '⚡ Fired' : 'Did not fire';
+}
+function fmtMetering(v) {
+  const m = {0:'Unknown',1:'Average',2:'Center-Weighted',3:'Spot',4:'Multi-Spot',5:'Pattern',6:'Partial'};
+  return m[v] || null;
+}
+function fmtOrientation(v) {
+  const m = {1:'Normal',2:'Mirrored',3:'Rotated 180°',6:'90° CW',8:'90° CCW'};
+  return m[v] || null;
+}
+function fmtDate(dt) {
+  try { return new Date(dt).toLocaleDateString('en-US', {weekday:'short', year:'numeric', month:'short', day:'numeric'}); }
+  catch { return String(dt); }
+}
+function fmtTime(dt) {
+  try { return new Date(dt).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+  catch { return null; }
+}
+function fmtDeg(val, axis) {
+  const abs = Math.abs(val);
+  const d   = Math.floor(abs);
+  const m   = Math.floor((abs - d) * 60);
+  const s   = ((abs - d - m/60) * 3600).toFixed(2);
+  const dir = axis === 'lat' ? (val >= 0 ? 'N' : 'S') : (val >= 0 ? 'E' : 'W');
+  return `${d}° ${m}′ ${s}″ ${dir}`;
+}
+function compass(deg) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
+// ── Show/hide helpers ─────────────────────────────────────────
+function show(id)   { document.getElementById(id).classList.add('show'); }
+function hide(id)   { document.getElementById(id).classList.remove('show'); }
+function showEl(id) { document.getElementById(id).style.display = ''; }
+function hideEl(id) { document.getElementById(id).style.display = 'none'; }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
